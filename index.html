@@ -353,6 +353,7 @@ function shuffle(a) {
 }
 function show(id) {
   ['start', 'quiz', 'result'].forEach(s => $(s).classList.toggle('hidden', s !== id));
+  $('hero').classList.toggle('hidden', id !== 'start');
   window.scrollTo(0, 0);
 }
 function toast(msg) {
