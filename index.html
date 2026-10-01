@@ -79,6 +79,17 @@
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .secondary { width: 100%; padding: 14px; background: transparent; border: 1px solid var(--line); color: var(--text); font-weight: 600; }
   .note { color: var(--sub); font-size: .8rem; text-align: center; margin-top: 24px; }
+  .hero { display: flex; justify-content: center; gap: 8px; margin: 0 0 12px; }
+  .hero svg { height: 150px; width: auto; }
+  .figwrap { position: relative; display: flex; justify-content: center; background: var(--accent-weak); border-radius: 12px; padding: 12px 0 6px; margin-bottom: 12px; }
+  .figwrap svg { height: 170px; width: auto; }
+  .stamp { position: absolute; top: 8px; right: 14px; font-size: 3.2rem; font-weight: 700; line-height: 1; opacity: 0; transform: scale(1.6) rotate(-12deg); transition: all .25s; }
+  .stamp.show { opacity: .9; transform: scale(1) rotate(-12deg); }
+  .stamp.o { color: var(--ok); } .stamp.x { color: var(--ng); }
+  .review li { display: flex; gap: 10px; align-items: flex-start; }
+  .review .thumb { flex: 0 0 auto; width: 40px; background: var(--accent-weak); border-radius: 8px; padding: 2px 0; }
+  .review .thumb svg { display: block; width: 100%; height: auto; }
+  .review .body { flex: 1; min-width: 0; }
   .toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg);
     padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none;
@@ -90,6 +101,7 @@
 <main>
   <h1>平服判別クイズ</h1>
   <p class="lead">「平服でお越しください」<br>その服装、○か✕か？</p>
+  <div class="hero" id="hero"></div>
 
   <!-- スタート画面 -->
   <section id="start">
@@ -113,6 +125,7 @@
     <div class="progress"><span id="qNum"></span><span id="qScore"></span></div>
     <div class="bar"><div id="qBar"></div></div>
     <div class="card">
+      <div class="figwrap"><div id="qFig"></div><div class="stamp" id="qStamp"></div></div>
       <span class="tag" id="qTag"></span>
       <div class="scene" id="qScene"></div>
       <p class="outfit" id="qOutfit"></p>
@@ -194,7 +207,135 @@ const QUESTIONS = [
   { type: 'biz', scene: '取引先の創立記念パーティー・男性', outfit: 'パーカーにスラックス', ok: false,
     exp: 'パーカーは明らかな普段着。平服＝略礼装なのでジャケットとネクタイを着用しましょう。' },
 ];
-const TYPE_LABEL = { joy: 'お祝いの席', sad: '弔事', biz: 'ビジネス' };
+
+// ---- イラスト（QUESTIONS と同じ順番） ----
+// g: m=男性 / f=女性
+const NAVY = '#26345a', CHAR = '#4a4d52', GRAY = '#7a7e85', BLK = '#1e1e1e';
+const FIGS = [
+  { g: 'm', top: 'suit', c: NAVY, tie: '#d9963a' },
+  { g: 'm', top: 'jacket', c: GRAY, inner: '#f2f2f2', legs: '#3d5a8a' },
+  { g: 'm', top: 'suit', c: CHAR, shoes: 'sneaker' },
+  { g: 'f', dress: '#fbfaf6', necklace: 1 },
+  { g: 'f', dress: NAVY, necklace: 1, bag: '#c9a66b' },
+  { g: 'f', dress: 'leopard' },
+  { g: 'f', dress: '#b84a62', off: true, bag: '#e8d9b5' },
+  { g: 'f', top: 'jacket', c: '#c9b19a', inner: '#fbfaf6', bottom: 'pants', necklace: 1 },
+  { g: 'f', dress: '#5c7a6b', shoes: 'mule' },
+  { g: 'f', dress: BLK, bag: BLK, shoeC: BLK },
+  { g: 'm', top: 'suit', c: '#1f2a4a', tie: '#a33a3a', legs: '#5a5e66', emblem: true, young: true },
+  { g: 'm', top: 'suit', c: CHAR, tie: BLK },
+  { g: 'm', top: 'polo', c: '#3f7fbf', legs: '#c8b48a' },
+  { g: 'f', dress: BLK, necklace: 1, bag: BLK, shoeC: BLK },
+  { g: 'f', dress: NAVY, necklace: 2, bag: BLK },
+  { g: 'f', top: 'jacket', c: GRAY, inner: '#2a2a2a', bottom: 'skirt', gold: true },
+  { g: 'f', dress: 'floral' },
+  { g: 'm', top: 'suit', c: NAVY, tie: '#7a2b3a' },
+  { g: 'f', top: 'jacket', c: NAVY, inner: '#fbfaf6', bottom: 'skirt', necklace: 1, bag: '#c9a66b' },
+  { g: 'm', top: 'hoodie', c: '#8a8f96', legs: '#2e2e2e' },
+];
+QUESTIONS.forEach((q, i) => q.fig = FIGS[i]);
+
+const SKIN = '#f1c9a5', HAIR = '#2e2a28', EDGE = 'rgba(0,0,0,.22)';
+let figSeq = 0;
+function figure(s) {
+  const id = 'fg' + (++figSeq), defs = {};
+  const fill = c => {
+    if (c === 'leopard') {
+      defs.l = `<pattern id="${id}l" width="10" height="10" patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="#d9a85b"/><circle cx="3" cy="3" r="1.8" fill="#3a2a1a"/><circle cx="8" cy="7.5" r="1.5" fill="#3a2a1a"/><circle cx="7.5" cy="2" r=".9" fill="#7a5530"/><circle cx="2" cy="8" r=".9" fill="#7a5530"/></pattern>`;
+      return `url(#${id}l)`;
+    }
+    if (c === 'floral') {
+      defs.f = `<pattern id="${id}f" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="#fff1c2"/><circle cx="3" cy="3" r="2.2" fill="#ef7fa0"/><circle cx="3" cy="3" r=".8" fill="#ffd34d"/><circle cx="9" cy="9" r="2.2" fill="#f59a42"/><circle cx="9" cy="9" r=".8" fill="#fff"/><circle cx="9.5" cy="2.5" r="1" fill="#7cc27a"/></pattern>`;
+      return `url(#${id}f)`;
+    }
+    return c;
+  };
+  const P = (d, c, extra = '') => `<path d="${d}" fill="${fill(c)}" stroke="${EDGE}" stroke-width=".8" ${extra}/>`;
+  const out = [];
+  const shoes = (kind, c) => {
+    if (kind === 'sneaker') return [49, 71].map(x => `<ellipse cx="${x}" cy="154" rx="10" ry="4.5" fill="#fff" stroke="#9aa0a6"/><path d="M${x - 9} 155 h18" stroke="#9aa0a6"/>`).join('');
+    if (kind === 'mule') return [51, 69].map(x => `<ellipse cx="${x}" cy="153" rx="6.5" ry="3" fill="${SKIN}" stroke="${EDGE}"/><path d="M${x - 6} 151 h9 v4 h-9z" fill="#c9a66b"/>`).join('');
+    if (kind === 'pumps') return [51, 69].map(x => `<path d="M${x - 7} 154 Q${x - 7} 149 ${x - 2} 149 L${x + 5} 149 L${x + 6} 154Z" fill="${c}"/><rect x="${x + 4}" y="153" width="2" height="4" fill="${c}"/>`).join('');
+    return [49, 71].map(x => `<ellipse cx="${x}" cy="154" rx="10" ry="4" fill="#1a1a1a"/>`).join('');
+  };
+  const arc = (y1, n, r, c) => { // ネックレス（2次ベジェ上に珠を並べる）
+    let s2 = '';
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, x = (1 - t) ** 2 * 52 + 2 * t * (1 - t) * 60 + t * t * 68, y = (1 - t) ** 2 * 44 + 2 * t * (1 - t) * y1 + t * t * 44;
+      s2 += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${c}" stroke="rgba(0,0,0,.25)" stroke-width=".4"/>`;
+    }
+    return s2;
+  };
+
+  if (s.g === 'm') {
+    if (s.top === 'hoodie') out.push(P('M42 48 Q38 16 60 12 Q82 16 78 48Z', s.c));
+    out.push(P('M39 100 L59 100 L57 151 L43 151Z', s.legs || s.c), P('M61 100 L81 100 L77 151 L63 151Z', s.legs || s.c));
+    out.push(shoes(s.shoes, ''));
+    out.push(P('M38 50 Q40 44 51 43 L69 43 Q80 44 82 50 L84 101 L36 101Z', s.c));
+    if (s.top === 'polo') {
+      out.push(P('M38 50 L33 66 L42 68 L44 58Z', s.c), P('M82 50 L87 66 L78 68 L76 58Z', s.c));
+      out.push(P('M34 66 L30 97 L37 99 L42 68Z', SKIN), P('M86 66 L90 97 L83 99 L78 68Z', SKIN));
+    } else {
+      out.push(P('M38 50 L30 97 L37 99 L44 62Z', s.c), P('M82 50 L90 97 L83 99 L76 62Z', s.c));
+    }
+    out.push(`<circle cx="33" cy="100" r="4.5" fill="${SKIN}"/><circle cx="87" cy="100" r="4.5" fill="${SKIN}"/>`);
+    out.push(`<rect x="55" y="35" width="10" height="9" fill="${SKIN}"/>`);
+    if (s.top === 'suit' || s.top === 'jacket') {
+      out.push(P('M52 43 L60 64 L68 43Z', s.inner || '#fff'));
+      if (s.tie) out.push(`<path d="M58 45 L62 45 L63.5 70 L60 75 L56.5 70Z" fill="${s.tie}"/>`);
+      out.push(`<path d="M52 43 L57 72 M68 43 L63 72" stroke="rgba(0,0,0,.3)" fill="none"/><circle cx="60" cy="84" r="1.4" fill="rgba(0,0,0,.35)"/>`);
+      if (s.emblem) out.push(`<circle cx="72" cy="60" r="3" fill="#d4a72c"/>`);
+    } else if (s.top === 'polo') {
+      out.push(P('M52 43 L60 50 L68 43 L65 40 L60 46 L55 40Z', s.c), `<path d="M60 50 V60" stroke="rgba(0,0,0,.3)"/><circle cx="60" cy="54" r=".9" fill="#fff"/><circle cx="60" cy="58" r=".9" fill="#fff"/>`);
+    } else if (s.top === 'hoodie') {
+      out.push(`<path d="M56 46 L55 62 M64 46 L65 62" stroke="#fff" stroke-width="1.2"/>`, P('M48 80 L72 80 L74 96 L46 96Z', s.c));
+    }
+    out.push(`<circle cx="60" cy="25" r="${s.young ? 12.5 : 13}" fill="${SKIN}"/>`);
+    out.push(`<path d="M47 24 Q46 9 60 9 Q74 9 73 24 Q70 15 60 15 Q50 15 47 24Z" fill="${HAIR}"/>`);
+  } else {
+    out.push(`<path d="M44 30 Q42 7 60 7 Q78 7 76 30 L78 52 L42 52Z" fill="${HAIR}"/>`);
+    if (s.top === 'jacket') {
+      if (s.bottom === 'pants') {
+        out.push(P('M43 92 L59 92 L58 150 L46 150Z', s.c), P('M61 92 L77 92 L74 150 L62 150Z', s.c));
+      } else {
+        out.push(`<rect x="48" y="122" width="7" height="28" fill="${SKIN}"/><rect x="65" y="122" width="7" height="28" fill="${SKIN}"/>`);
+        out.push(P('M42 90 L78 90 L82 124 L38 124Z', s.c));
+      }
+      out.push(shoes('pumps', s.shoeC || '#2a2a2a'));
+      out.push(P('M44 47 Q50 43 60 43 Q70 43 76 47 L78 93 L42 93Z', s.c));
+      out.push(P('M44 47 L37 95 L43 97 L48 60Z', s.c), P('M76 47 L83 95 L77 97 L72 60Z', s.c));
+      out.push(`<rect x="56" y="35" width="8" height="9" fill="${SKIN}"/>`);
+      out.push(P('M53 43 L60 60 L67 43Z', s.inner));
+      out.push(`<path d="M53 43 L57 74 M67 43 L63 74" stroke="rgba(0,0,0,.3)" fill="none"/>`);
+    } else {
+      out.push(`<rect x="48" y="126" width="7" height="24" fill="${SKIN}"/><rect x="65" y="126" width="7" height="24" fill="${SKIN}"/>`);
+      out.push(shoes(s.shoes || 'pumps', s.shoeC || '#2a2a2a'));
+      out.push(`<rect x="56" y="35" width="8" height="10" fill="${SKIN}"/>`);
+      if (s.off) {
+        out.push(P('M42 51 Q46 44 60 44 Q74 44 78 51 L76 60 L44 60Z', SKIN));
+        out.push(P('M43 51 L35 95 L41 97 L47 60Z', SKIN), P('M77 51 L85 95 L79 97 L73 60Z', SKIN));
+        out.push(P('M45 57 L75 57 L73 80 L84 128 L36 128 L47 80Z', s.dress));
+      } else {
+        out.push(P('M40 62 L35 95 L41 97 L46 64Z', SKIN), P('M80 62 L85 95 L79 97 L74 64Z', SKIN));
+        out.push(P('M45 46 Q52 43 60 43 Q68 43 75 46 L73 80 L84 128 L36 128 L47 80Z', s.dress));
+        out.push(P('M45 46 L39 62 L46 64 L48 54Z', s.dress), P('M75 46 L81 62 L74 64 L72 54Z', s.dress));
+        out.push(`<path d="M54 43 Q60 49 66 43" fill="${SKIN}"/>`);
+      }
+    }
+    out.push(`<circle cx="38" cy="98" r="4" fill="${SKIN}"/><circle cx="82" cy="98" r="4" fill="${SKIN}"/>`);
+    if (s.bag) out.push(`<path d="M82 98 Q88 90 94 98" stroke="${s.bag}" stroke-width="1.5" fill="none"/><rect x="80" y="98" width="16" height="11" rx="2" fill="${s.bag}" stroke="${EDGE}"/>`);
+    out.push(`<circle cx="60" cy="25" r="12.5" fill="${SKIN}"/>`);
+    out.push(`<path d="M47 25 Q47 11 60 11 Q73 11 73 25 Q67 16 60 17 Q53 16 47 25Z" fill="${HAIR}"/>`);
+    if (s.necklace >= 1) out.push(arc(52, 8, 1.5, '#fbf8f0'));
+    if (s.necklace >= 2) out.push(arc(58, 10, 1.5, '#fbf8f0'));
+    if (s.gold) out.push(`<path d="M52 44 Q60 56 68 44" stroke="#d4a72c" stroke-width="1.6" fill="none"/><circle cx="60" cy="52" r="3" fill="#e8b923" stroke="#a87d12" stroke-width=".6"/><path d="M66 52 l4 0 M68 50 l0 4 M51 50 l3 0 M52.5 48.5 l0 3" stroke="#e8b923" stroke-width="1"/>`);
+  }
+  // 顔
+  out.push(`<circle cx="55.5" cy="26" r="1.1" fill="#3a302a"/><circle cx="64.5" cy="26" r="1.1" fill="#3a302a"/><path d="M57 31 Q60 33 63 31" stroke="#a0644a" stroke-width="1" fill="none"/>`);
+  return `<svg viewBox="0 0 120 162" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="服装のイラスト"><defs>${Object.values(defs).join('')}</defs>${out.join('')}</svg>`;
+}
+
+const TYPE_LABEL ={ joy: 'お祝いの席', sad: '弔事', biz: 'ビジネス' };
 const ROUND = 10;
 const BEST_KEY = 'heihuku-best';
 
@@ -230,6 +371,8 @@ function renderQ() {
   $('qNum').textContent = `第${idx + 1}問 / ${order.length}`;
   $('qScore').textContent = `正解 ${score}`;
   $('qBar').style.width = `${idx / order.length * 100}%`;
+  $('qFig').innerHTML = figure(q.fig);
+  $('qStamp').className = 'stamp';
   $('qTag').className = `tag ${q.type}`;
   $('qTag').textContent = TYPE_LABEL[q.type];
   $('qScene').textContent = `「平服で」と言われた ${q.scene}`;
@@ -250,6 +393,8 @@ function answer(btn) {
   $('feedback').className = `feedback ${right ? 'right' : 'wrong'}`;
   $('fbVerdict').textContent = `${right ? '正解！' : '不正解…'}　答えは「${q.ok ? '○' : '✕'}」`;
   $('fbText').textContent = q.exp;
+  $('qStamp').textContent = q.ok ? '○' : '✕';
+  $('qStamp').className = `stamp ${q.ok ? 'o' : 'x'} show`;
   $('qScore').textContent = `正解 ${score}`;
   $('nextBtn').textContent = idx + 1 < order.length ? '次へ' : '結果を見る';
   $('nextBtn').classList.remove('hidden');
@@ -274,7 +419,7 @@ function finish() {
   $('review').innerHTML = '';
   log.forEach(({ q, right }) => {
     const li = document.createElement('li');
-    li.innerHTML = `<div><span class="mark ${right ? 'r' : 'w'}"></span><span class="t"></span></div><div class="exp"></div>`;
+    li.innerHTML = `<div class="thumb">${figure(q.fig)}</div><div class="body"><div><span class="mark ${right ? 'r' : 'w'}"></span><span class="t"></span></div><div class="exp"></div></div>`;
     li.querySelector('.mark').textContent = right ? '○' : '✕';
     li.querySelector('.t').textContent = `${q.scene}：${q.outfit} → 答え「${q.ok ? '○' : '✕'}」`;
     li.querySelector('.exp').textContent = q.exp;
@@ -300,6 +445,7 @@ $('startBtn').addEventListener('click', start);
 $('retryBtn').addEventListener('click', start);
 $('shareBtn').addEventListener('click', share);
 $('qCount').textContent = ROUND;
+$('hero').innerHTML = figure({ g: 'm', top: 'suit', c: NAVY, tie: '#d9963a' }) + figure({ g: 'f', dress: NAVY, necklace: 1, bag: '#c9a66b' });
 showBest();
 </script>
 </body>
